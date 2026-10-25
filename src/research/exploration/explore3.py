@@ -9,8 +9,23 @@ from scenes import paths, Geometry
 import explore2 as E2
 from explore2 import Frontier, frontier_step, top_down, draw_map, CAM_H, RADIUS, GRID, A_FWD_L, A_FWD_S, A_TURN_L, A_UP
 
+class DepthNet:
+    """Monocular metric depth (Depth-Anything-V2 Metric-Indoor-Small) -- the only depth source in RGB-only mode."""
+    SCALE = 0.41  # one global scalar: our 90deg-HFOV camera is far from the model's training FOV, so raw metric output is ~2.5x too far (median ratio 2.4-2.9 over 4 scenes). Same role as a one-time depth calibration on a real robot.
+    def __init__(self):
+        import torch; from transformers import AutoImageProcessor, AutoModelForDepthEstimation
+        mid = "depth-anything/Depth-Anything-V2-Metric-Indoor-Small-hf"; self.torch = torch
+        self.dev = "mps" if torch.backends.mps.is_available() else "cpu"
+        self.proc = AutoImageProcessor.from_pretrained(mid); self.net = AutoModelForDepthEstimation.from_pretrained(mid).to(self.dev).eval()
+    def __call__(self, rgb):
+        torch = self.torch; x = self.proc(images=rgb, return_tensors="pt")["pixel_values"].to(self.dev)
+        with torch.no_grad(): out = self.net(pixel_values=x).predicted_depth
+        d = torch.nn.functional.interpolate(out[:, None], size=rgb.shape[:2], mode="bilinear", align_corners=False)[0, 0]
+        return d.float().cpu().numpy() * self.SCALE
+
 class Env:
-    def __init__(self, S, G, rng, fwd_noise=0.03, yaw_noise=0.5, depth_noise=0.01):
+    def __init__(self, S, G, rng, fwd_noise=0.03, yaw_noise=0.5, depth_noise=0.01, depth_net=None):
+        self.depth_net = depth_net; self.absrel = []
         self.S, self.G, self.rng = S, G, rng; self.fn, self.yn, self.dn = fwd_noise, yaw_noise, depth_noise
         self.coll = 0; self.dist = 0.0; self.traj = []; self.seen = set()
     def reset(self):
@@ -27,7 +42,9 @@ class Env:
         else: self.coll += 1  # crash: motion rejected; agent is NOT told
     def sense(self):
         rgb, d = self.S.obs(); d = d.copy(); v = d > 0.05
-        d[v] *= 1 + self.rng.normal(0, self.dn, d.shape)[v]  # multiplicative depth noise
+        if self.depth_net is not None:  # RGB-only: agent's depth comes from the monocular estimator, never from the sensor
+            dp = self.depth_net(rgb); self.absrel.append(float(np.median(np.abs(dp[v] - d[v]) / d[v]))); d = dp
+        else: d[v] *= 1 + self.rng.normal(0, self.dn, d.shape)[v]  # multiplicative depth noise
         # score true coverage (privileged, evaluation only)
         p, y = self.S.pose(); c, s_ = np.cos(np.deg2rad(y)), np.sin(np.deg2rad(y)); R = np.array([[c, 0, s_], [0, 1, 0], [-s_, 0, c]])
         f = 128; u, vv = np.meshgrid(np.arange(0, 256, 4), np.arange(0, 256, 4)); r4 = np.stack([(u - 128) / f, -(vv - 128) / f, -np.ones_like(u, float)], -1).reshape(-1, 3)
@@ -95,9 +112,10 @@ def pol_random(A):
     elif A.free_dist() >= 0.15 and A.rng.random() < 0.5: A.act("fwd", A_FWD_S)
     else: A.act("yaw", float(A.rng.choice([-A_TURN_L, A_TURN_L])))
 
-def rollout(policy, S, G, steps, seed, pose_mode, video=None, name=""):
-    rng = np.random.default_rng(seed); env = Env(S, G, rng); A = SensorAgent(env, seed, pose_mode)
+def rollout(policy, S, G, steps, seed, pose_mode, video=None, name="", depth_net=None):
+    rng = np.random.default_rng(seed); env = Env(S, G, rng, depth_net=depth_net); A = SensorAgent(env, seed, pose_mode)
     p, y = env.reset(); A.init(p, y); F = Frontier(); curve = []; frames = []; drift = []
+    tag = "rgb" if depth_net else "rgbd"
     base, lo, sc = top_down(None, G) if video else (None, None, None); t0 = time.time()
     for t in range(steps):
         rgb, d = env.sense(); A.observe(rgb, d)
@@ -105,7 +123,7 @@ def rollout(policy, S, G, steps, seed, pose_mode, video=None, name=""):
         if video and t % 2 == 0:
             m = draw_map(base, lo, sc, env.traj)
             for i in range(1, len(A.est_traj)): cv2.line(m, tuple(((A.est_traj[i - 1][[0, 2]] - lo) * sc).astype(int)), tuple(((A.est_traj[i][[0, 2]] - lo) * sc).astype(int)), (0, 150, 0), 1)
-            r = cv2.resize(rgb, (300, 300)).copy(); cv2.putText(r, f"{policy}/{pose_mode} t={t} cov={env.coverage():.2f}", (5, 15), cv2.FONT_HERSHEY_SIMPLEX, .42, (255, 255, 0), 1)
+            r = cv2.resize(rgb, (300, 300)).copy(); cv2.putText(r, f"{policy}/{pose_mode}/{tag} t={t} cov={env.coverage():.2f}", (5, 15), cv2.FONT_HERSHEY_SIMPLEX, .42, (255, 255, 0), 1)
             frames.append(np.concatenate([r, m], 1))
         if policy == "random": pol_random(A)
         else:
@@ -119,15 +137,16 @@ def rollout(policy, S, G, steps, seed, pose_mode, video=None, name=""):
                 F.path = []; F.replan_in = 0
     wall = time.time() - t0
     if video: imageio.mimsave(video, frames, fps=15)
-    return dict(scene=name, policy=f"{policy}-{pose_mode}", seed=seed, steps=steps, coverage=env.coverage(), curve=curve, collisions=env.coll,
+    return dict(scene=name, policy=f"{policy}-{pose_mode}" + ("-rgb" if depth_net else "-rgbd"), depth_absrel=float(np.mean(env.absrel)) if env.absrel else None, seed=seed, steps=steps, coverage=env.coverage(), curve=curve, collisions=env.coll,
                 dist=env.dist, wall_s=wall, ms_per_step=1000 * wall / steps, final_drift_m=drift[-1], mean_drift_m=float(np.mean(drift)))
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser(); ap.add_argument("--scene", required=True); ap.add_argument("--steps", type=int, default=500)
-    ap.add_argument("--seeds", type=int, default=3); ap.add_argument("--out", default="results_sensor"); a = ap.parse_args(); os.makedirs(a.out, exist_ok=True)
+    ap.add_argument("--seeds", type=int, default=3); ap.add_argument("--out", default="results_sensor"); ap.add_argument("--sensor", default="rgbd", choices=["rgbd", "rgb"]); ap.add_argument("--configs", default="random:odom,frontier:gt,frontier:odom"); a = ap.parse_args(); os.makedirs(a.out, exist_ok=True)
     g, n = paths(a.scene); S = UAVSim(g); S.sim.pathfinder.load_nav_mesh(n); G = Geometry(g, S.sim.pathfinder.get_bounds()); out = []
-    for pol, pm in (("random", "odom"), ("frontier", "gt"), ("frontier", "odom")):
+    dn = DepthNet() if a.sensor == "rgb" else None
+    for pol, pm in [c.split(":") for c in a.configs.split(",")]:
         for sd in range(a.seeds):
-            r = rollout(pol, S, G, a.steps, sd, pm, f"{a.out}/{a.scene}__{pol}-{pm}__{sd}.mp4" if sd == 0 else None, a.scene); out.append(r)
-            print(f"{a.scene} {r['policy']} s{sd} cov={r['coverage']:.3f} coll={r['collisions']} dist={r['dist']:.0f}m drift={r['final_drift_m']:.2f}m wall={r['wall_s']:.1f}s", flush=True)
-    json.dump(out, open(f"{a.out}/{a.scene}.json", "w"))
+            r = rollout(pol, S, G, a.steps, sd, pm, f"{a.out}/{a.scene}__{pol}-{pm}-{a.sensor}__{sd}.mp4" if sd == 0 else None, a.scene, dn); out.append(r)
+            print(f"{a.scene} {r['policy']} s{sd} cov={r['coverage']:.3f} coll={r['collisions']} dist={r['dist']:.0f}m drift={r['final_drift_m']:.2f}m absrel={r['depth_absrel']} wall={r['wall_s']:.1f}s", flush=True)
+    json.dump(out, open(f"{a.out}/{a.scene}__{a.sensor}.json", "w"))

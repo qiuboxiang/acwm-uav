@@ -95,7 +95,7 @@ class Frontier:
     NB6 = np.array([[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]])
     def __init__(self): self.path = []; self.target_yaw = None; self.bad = set(); self.stuck = 0; self.replan_in = 0; self.thr = 30
     def plan(self, A):
-        occ = A.occ; cp = A.cam(); start = tuple(np.floor((cp - A.origin) / GRID).astype(int))
+        occ = A.occ; cp = A.cam(); start = tuple(np.clip(np.floor((cp - A.origin) / GRID).astype(int), 0, np.array(A.shape) - 1))
         from scipy.ndimage import binary_dilation
         blocked = binary_dilation(occ == 2, iterations=1)  # inflate by 1 cell (0.25m) -> 0.25 + radius margin
         for b in self.bad: blocked[b] = True
