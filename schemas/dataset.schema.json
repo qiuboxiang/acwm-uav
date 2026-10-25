@@ -1,0 +1,141 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "content_sha256": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Content Sha256"
+    },
+    "created_at": {
+      "format": "date-time",
+      "title": "Created At",
+      "type": "string"
+    },
+    "dvc_path": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Dvc Path"
+    },
+    "finalized_at": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Finalized At"
+    },
+    "hf_revision": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Hf Revision"
+    },
+    "id": {
+      "title": "Id",
+      "type": "string"
+    },
+    "license": {
+      "title": "License",
+      "type": "string"
+    },
+    "name": {
+      "title": "Name",
+      "type": "string"
+    },
+    "notes": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Notes",
+      "type": "array"
+    },
+    "preprocessing": {
+      "title": "Preprocessing",
+      "type": "string"
+    },
+    "redistributable": {
+      "default": false,
+      "title": "Redistributable",
+      "type": "boolean"
+    },
+    "schema_version": {
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "source": {
+      "title": "Source",
+      "type": "string"
+    },
+    "splits": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "title": "Splits",
+      "type": "object"
+    },
+    "status": {
+      "default": "finalized",
+      "enum": [
+        "draft",
+        "finalized",
+        "failed"
+      ],
+      "title": "Status",
+      "type": "string"
+    },
+    "supersedes": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Supersedes"
+    },
+    "version": {
+      "title": "Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "id",
+    "created_at",
+    "name",
+    "version",
+    "source",
+    "license",
+    "splits",
+    "preprocessing"
+  ],
+  "title": "DatasetRecord",
+  "type": "object"
+}

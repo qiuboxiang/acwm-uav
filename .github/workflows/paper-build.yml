@@ -1,0 +1,21 @@
+name: paper-build
+
+on:
+  push:
+    paths: ["paper/**", "docker/latex.Dockerfile", ".github/workflows/paper-build.yml"]
+  pull_request:
+    paths: ["paper/**", "docker/latex.Dockerfile", ".github/workflows/paper-build.yml"]
+
+permissions:
+  contents: read
+
+jobs:
+  latex:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+      - run: uv python install 3.11
+      - run: uv sync
+      - run: sudo apt-get update && sudo apt-get install -y latexmk texlive-latex-extra texlive-fonts-recommended
+      - run: uv run researchctl paper build

@@ -1,0 +1,118 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "artifact_dir": {
+      "default": "artifacts",
+      "title": "Artifact Dir",
+      "type": "string"
+    },
+    "default_experiment": {
+      "title": "Default Experiment",
+      "type": "string"
+    },
+    "dvc_remote": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Dvc Remote"
+    },
+    "github_repository": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Github Repository"
+    },
+    "hf_dataset_repository": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Hf Dataset Repository"
+    },
+    "hf_model_repository": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Hf Model Repository"
+    },
+    "hf_org": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Hf Org"
+    },
+    "mlflow_tracking_uri": {
+      "default": ".mlruns",
+      "title": "Mlflow Tracking Uri",
+      "type": "string"
+    },
+    "name": {
+      "title": "Name",
+      "type": "string"
+    },
+    "paper_main": {
+      "title": "Paper Main",
+      "type": "string"
+    },
+    "registry_dir": {
+      "default": "registry",
+      "title": "Registry Dir",
+      "type": "string"
+    },
+    "release_visibility": {
+      "default": "private",
+      "enum": [
+        "private",
+        "public"
+      ],
+      "title": "Release Visibility",
+      "type": "string"
+    },
+    "schema_version": {
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "target": {
+      "title": "Target",
+      "type": "string"
+    }
+  },
+  "required": [
+    "name",
+    "target",
+    "default_experiment",
+    "paper_main"
+  ],
+  "title": "ProjectSettings",
+  "type": "object"
+}

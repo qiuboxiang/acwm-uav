@@ -1,0 +1,3 @@
+kind: local
+distributed_backend: gloo
+num_processes: 1

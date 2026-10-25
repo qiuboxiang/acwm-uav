@@ -1,0 +1,186 @@
+{
+  "$defs": {
+    "TemplateInfo": {
+      "additionalProperties": false,
+      "properties": {
+        "advertised_url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Advertised Url"
+        },
+        "available": {
+          "default": false,
+          "title": "Available",
+          "type": "boolean"
+        },
+        "resolved_url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Resolved Url"
+        },
+        "schema_version": {
+          "default": 1,
+          "title": "Schema Version",
+          "type": "integer"
+        },
+        "sha256": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Sha256"
+        },
+        "source_commit": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Source Commit"
+        }
+      },
+      "title": "TemplateInfo",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "anonymous": {
+      "default": true,
+      "title": "Anonymous",
+      "type": "boolean"
+    },
+    "deadlines": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "title": "Deadlines",
+      "type": "object"
+    },
+    "fetched_at": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Fetched At"
+    },
+    "id": {
+      "title": "Id",
+      "type": "string"
+    },
+    "name": {
+      "title": "Name",
+      "type": "string"
+    },
+    "notes": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Notes",
+      "type": "array"
+    },
+    "page_limit": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Page Limit"
+    },
+    "schema_version": {
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "source_hashes": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "title": "Source Hashes",
+      "type": "object"
+    },
+    "source_urls": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Source Urls",
+      "type": "array"
+    },
+    "status": {
+      "enum": [
+        "ready",
+        "awaiting_official_template",
+        "manual_review"
+      ],
+      "title": "Status",
+      "type": "string"
+    },
+    "submission_url": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Submission Url"
+    },
+    "template": {
+      "$ref": "#/$defs/TemplateInfo"
+    },
+    "timezone": {
+      "default": "AoE",
+      "title": "Timezone",
+      "type": "string"
+    },
+    "year": {
+      "title": "Year",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "id",
+    "name",
+    "year",
+    "status",
+    "source_urls",
+    "template"
+  ],
+  "title": "VenueRecord",
+  "type": "object"
+}

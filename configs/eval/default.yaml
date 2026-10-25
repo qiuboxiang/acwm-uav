@@ -1,0 +1,4 @@
+suite: default
+metrics: [mse]
+batch_size: 32
+seed: 7

@@ -1,0 +1,10 @@
+cff-version: 1.2.0
+message: "If you use this research artifact, cite the associated paper and this software release."
+title: "AI Research Project"
+type: software
+version: 0.1.0
+date-released: 2026-08-11
+license: MIT
+authors:
+  - name: "Anonymous Authors"
+repository-code: "https://example.invalid/configure-before-release"

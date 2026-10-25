@@ -1,0 +1,39 @@
+name: release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Frozen semantic version, for example v1.0.0
+        required: true
+        type: string
+      publish:
+        description: Publish to GitHub and Hugging Face after validation
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    environment: release
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+      - run: uv python install 3.11
+      - run: uv sync --all-extras
+      - run: sudo apt-get update && sudo apt-get install -y latexmk texlive-latex-extra texlive-fonts-recommended
+      - run: uv run researchctl release check --strict --build
+      - name: Publication plan
+        run: uv run researchctl release publish --version "${{ inputs.version }}" --dry-run
+      - name: Publish
+        if: ${{ inputs.publish }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: uv run researchctl release publish --version "${{ inputs.version }}" --no-dry-run --confirm

@@ -1,0 +1,20 @@
+schema_version: 1
+version: 0.0.0-dev
+status: candidate
+generated_at: '2026-08-11T08:31:07.627059Z'
+code_commit: unborn
+overleaf_head: null
+datasets: []
+runs: []
+checkpoints: []
+evaluations: []
+evidence: []
+hf_revisions: {}
+checksums:
+  paper/evidence.yaml: 4511250f4407bf8e3d4c66deaea468602e8faf5734b4f9b5a57d93bf54ab68cc
+unlinked:
+  datasets: []
+  runs: []
+  checkpoints: []
+  evaluations: []
+supersedes: null

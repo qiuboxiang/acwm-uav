@@ -1,0 +1,4 @@
+project_doc_max_bytes = 65536
+
+# Repository rules are stored in layered AGENTS.md files. Mechanical checks
+# remain in pre-commit and CI so correctness does not depend on prompts alone.

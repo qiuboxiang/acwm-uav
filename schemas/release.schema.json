@@ -1,0 +1,130 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "checkpoints": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Checkpoints",
+      "type": "array"
+    },
+    "checksums": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "title": "Checksums",
+      "type": "object"
+    },
+    "code_commit": {
+      "title": "Code Commit",
+      "type": "string"
+    },
+    "datasets": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Datasets",
+      "type": "array"
+    },
+    "evaluations": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Evaluations",
+      "type": "array"
+    },
+    "evidence": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Evidence",
+      "type": "array"
+    },
+    "generated_at": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Generated At"
+    },
+    "hf_revisions": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "title": "Hf Revisions",
+      "type": "object"
+    },
+    "overleaf_head": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Overleaf Head"
+    },
+    "runs": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Runs",
+      "type": "array"
+    },
+    "schema_version": {
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "status": {
+      "enum": [
+        "candidate",
+        "frozen",
+        "published"
+      ],
+      "title": "Status",
+      "type": "string"
+    },
+    "supersedes": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Supersedes"
+    },
+    "unlinked": {
+      "additionalProperties": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "title": "Unlinked",
+      "type": "object"
+    },
+    "version": {
+      "title": "Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "version",
+    "status",
+    "code_commit"
+  ],
+  "title": "ReleaseManifest",
+  "type": "object"
+}

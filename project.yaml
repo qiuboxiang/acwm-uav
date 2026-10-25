@@ -1,0 +1,14 @@
+schema_version: 1
+name: acwm-uav
+target: iclr-2027
+default_experiment: configs/experiment/synthetic.yaml
+paper_main: paper/main.tex
+registry_dir: registry
+artifact_dir: artifacts
+mlflow_tracking_uri: .mlruns
+dvc_remote: null
+github_repository: null
+hf_org: null
+hf_model_repository: null
+hf_dataset_repository: null
+release_visibility: private

@@ -1,0 +1,39 @@
+name: venue-watch
+
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+      - run: uv python install 3.11
+      - run: uv sync
+      - run: uv run researchctl venue sync
+      - name: Open a review PR for semantic changes
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if git diff --quiet; then
+            exit 0
+          fi
+          branch="automation/venue-watch-${GITHUB_RUN_ID}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$branch"
+          git add paper/target/venue.yaml
+          git commit -m "chore: refresh submission target"
+          git push origin "$branch"
+          gh pr create --title "chore: refresh submission target" \
+            --body "Official venue metadata changed. Review deadlines, policy, and template checksum before merging." \
+            --base "${GITHUB_DEFAULT_BRANCH:-main}" --head "$branch"

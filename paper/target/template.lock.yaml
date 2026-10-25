@@ -1,0 +1,6 @@
+schema_version: 1
+installed: true
+source_url: https://media.iclr.cc/Conferences/ICLR2027/iclr-2027-style-files.zip
+sha256: 0d940dfa9398ae99a18f24a85a8a683f367204b6af6d17d2899e60a67102529e
+source_commit: null
+installed_at: '2026-08-11T08:30:05.205409+00:00'
