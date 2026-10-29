@@ -40,6 +40,10 @@ Use `uv run` before commands when working in the managed environment.
 - Keep generated files deterministic and include a header identifying their source.
 - Add or update tests for schema, synchronization, release, or training behavior.
 - Update the Chinese workflow documentation when a user-facing command changes.
+- Keep code and data fully reproducible from the documentation. In the same change that adds or alters a script, dependency,
+  scene, dataset, weight file, seed, default flag or output location, update `docs/workflow/` (and `README.md` when the
+  entry point changes) so a fresh clone can rebuild the result by following it; a change is not done until the docs match.
+- Verify documented commands and path checks by running them; state in the docs what could not be verified.
 
 ## Code review rules
 
@@ -47,3 +51,4 @@ Use `uv run` before commands when working in the managed environment.
 - Flag releases that omit source config, dataset version, checkpoint checksum,
   evaluation record, license, or paper evidence reference.
 - Flag secrets, personal identifiers, and machine-specific paths in tracked data.
+- Flag changes to code, data layout, dependencies or external assets whose workflow documentation was not updated.

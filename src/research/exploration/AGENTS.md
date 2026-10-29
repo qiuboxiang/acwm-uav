@@ -6,3 +6,5 @@
 - `mapping5.py` stays free of simulator imports so it can be unit-tested (`tests/test_exploration_mapping5.py`).
 - Result folders (`results*/`, `logs*/`, `../exploration_v5/`) and collected data under `data/` are local outputs; do not commit them.
 - Use paths relative to the script, never absolute local paths.
+- When a script, flag default, seed, scene list or output location here changes, update `docs/workflow/exploration.md` and
+  `docs/workflow/local-assets.md` in the same change; reproducibility is judged from those pages, not from the code.

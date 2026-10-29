@@ -90,6 +90,10 @@ git clone https://github.com/ethz-asl/wavemap.git third_party/wavemap      # 作
 
 只有在想让官方 `pywavemap` 后端跑起来时才需要；没有它，FrontierNet 对照会自动退回 numpy 版建图。
 
+## 维护约定
+
+本页和 [exploration.md](exploration.md) 是复现的依据，由 agent 和作者共同维护：新增或修改脚本、依赖、场景、权重、随机种子、默认参数或输出位置时，要在同一次改动里更新这两页，使别人克隆仓库后只靠文档就能重建代码和数据。新增外部资产时写明来源、使用的版本或提交、放置位置和检查命令；文档里的命令要实际运行过，没验证过的要如实写出。
+
 ## 出错时
 
 - 报找不到场景文件：先运行上面的自查命令，看是哪一个场景缺哪个文件，再核对 `UAV_SCENES_ROOT`。
