@@ -7,7 +7,8 @@ class UAVSim:
     # IndoorUAV action magnitudes (m / deg)
     ACTIONS = {"fwd_s": 0.15, "fwd_l": 0.9, "turn_s": 3, "turn_l": 15}
 
-    def __init__(self, glb, res=(256, 256), hfov=90, cam_h=1.5, seed=0):
+    def __init__(self, glb, res=(256, 256), hfov=90, cam_h=1.5, seed=0, rec=None):
+        self.hfov = hfov; self.rec = rec
         cfg = habitat_sim.SimulatorConfiguration()
         cfg.scene_id = glb; cfg.enable_physics = False; cfg.gpu_device_id = 0
         specs = []
@@ -15,6 +16,9 @@ class UAVSim:
             s = habitat_sim.CameraSensorSpec(); s.uuid = uuid; s.sensor_type = st
             s.resolution = list(res); s.hfov = hfov; s.position = Vector3(0, cam_h, 0)
             specs.append(s)
+        if rec:  # extra high-resolution recording camera at the same pose (dataset frames); agent perception keeps using the small sensors
+            for uuid, st in (("rec_rgb", habitat_sim.SensorType.COLOR), ("rec_depth", habitat_sim.SensorType.DEPTH)):
+                s = habitat_sim.CameraSensorSpec(); s.uuid = uuid; s.sensor_type = st; s.resolution = list(rec); s.hfov = hfov; s.position = Vector3(0, cam_h, 0); specs.append(s)
         ag = habitat_sim.agent.AgentConfiguration(); ag.sensor_specifications = specs
         ag.height = cam_h; ag.radius = 0.1
         self.sim = habitat_sim.Simulator(habitat_sim.Configuration(cfg, [ag]))

@@ -31,7 +31,8 @@ class Env:
     def reset(self):
         for _ in range(500):
             p = np.array(self.S.sim.pathfinder.get_random_navigable_point(), float)
-            if np.isfinite(p).all() and not self.G.collides(p + [0, CAM_H, 0], RADIUS + 0.1): break
+            self.G.ensure_main(self.S.sim.pathfinder)
+            if np.isfinite(p).all() and not self.G.collides(p + [0, CAM_H, 0], RADIUS + 0.1) and self.G.in_main(p + [0, CAM_H, 0]): break
         y = float(self.rng.integers(0, 360)); self.S.set_pose(p, y); return p, y
     def step(self, kind, mag):
         p, y = self.S.pose(); cp = lambda q: q + np.array([0, CAM_H, 0]); self.traj.append(cp(p).copy())
@@ -47,7 +48,7 @@ class Env:
         else: d[v] *= 1 + self.rng.normal(0, self.dn, d.shape)[v]  # multiplicative depth noise
         # score true coverage (privileged, evaluation only)
         p, y = self.S.pose(); c, s_ = np.cos(np.deg2rad(y)), np.sin(np.deg2rad(y)); R = np.array([[c, 0, s_], [0, 1, 0], [-s_, 0, c]])
-        f = 128; u, vv = np.meshgrid(np.arange(0, 256, 4), np.arange(0, 256, 4)); r4 = np.stack([(u - 128) / f, -(vv - 128) / f, -np.ones_like(u, float)], -1).reshape(-1, 3)
+        f = 128 / np.tan(np.deg2rad(getattr(self.S, 'hfov', 90)) / 2); u, vv = np.meshgrid(np.arange(0, 256, 4), np.arange(0, 256, 4)); r4 = np.stack([(u - 128) / f, -(vv - 128) / f, -np.ones_like(u, float)], -1).reshape(-1, 3)
         d4 = self.S.obs()[1][::4, ::4].reshape(-1); m = (d4 > .05) & (d4 < 8); w = (r4[m] * d4[m, None]) @ R.T + p + [0, CAM_H, 0]
         self.seen |= set(map(tuple, np.floor(w / 0.25).astype(np.int32)))
         return rgb, d
@@ -59,41 +60,62 @@ class PoseProxy:  # what E2.frontier_step calls as A.s.pose()
 
 class SensorAgent:
     """Mapping + planning from RGB-D and estimated pose only."""
-    def __init__(self, env, seed, pose_mode="odom", extent=(24, 6, 24)):
+    def __init__(self, env, seed, pose_mode="odom", extent=(96, 12, 96)):
         self.env, self.mode = env, pose_mode; self.rng = np.random.default_rng(seed + 1000); self.s = PoseProxy(self)
-        self.pos = None; self.yaw = None; self.f = 128
+        self.pos = None; self.yaw = None; self.f = 128 / np.tan(np.deg2rad(getattr(env.S, 'hfov', 90)) / 2)
         u, v = np.meshgrid(np.arange(0, 256, 8), np.arange(0, 256, 8)); self.rays = np.stack([(u - 128) / self.f, -(v - 128) / self.f, -np.ones_like(u, float)], -1).reshape(-1, 3)
         self.extent = extent; self.est_traj = []
     def init(self, p, y):  # anchor the map frame at the start pose (world-frame origin is arbitrary in reality)
         self.pos = p + np.array([0, CAM_H, 0]); self.yaw = y
         ex = np.array(self.extent, float); self.origin = self.pos - ex / 2 * np.array([1, 1, 1]); self.shape = np.ceil(ex / GRID).astype(int)
-        self.occ = np.zeros(self.shape, np.uint8)
+        self.occ = np.zeros(self.shape, np.uint8); c0 = np.floor((self.pos - self.origin) / GRID).astype(int); self.bb_lo = c0.copy(); self.bb_hi = c0.copy(); self.oob = 0
     def cam(self, p=None): return self.pos.copy()
     # ---- perception ----
     def observe(self, rgb, d):
         if self.mode == "gt": p, y = self.env.S.pose(); self.pos = p + np.array([0, CAM_H, 0]); self.yaw = y
         c, s_ = np.cos(np.deg2rad(self.yaw)), np.sin(np.deg2rad(self.yaw)); R = np.array([[c, 0, s_], [0, 1, 0], [-s_, 0, c]])
         dd = d[::8, ::8].reshape(-1); ok = dd > 0.05; dd = np.where(ok, dd, 6.0); hit = ok & (dd < 6.0); dirs = self.rays @ R.T
+        shp = np.array(self.shape)
         for dist in np.arange(0.0, 6.0, GRID / 2):
             m = dist < dd - 0.1; pts = self.pos + dirs[m] * dist
-            idx = np.clip(np.floor((pts - self.origin) / GRID).astype(int), 0, self.shape - 1)
-            self.occ[tuple(idx.T)] = np.where(self.occ[tuple(idx.T)] == 2, 2, 1)
-        hp = self.pos + dirs[hit] * dd[hit, None]; idx = np.clip(np.floor((hp - self.origin) / GRID).astype(int), 0, self.shape - 1); self.occ[tuple(idx.T)] = 2
+            idx = np.floor((pts - self.origin) / GRID).astype(int); idx = idx[((idx >= 0) & (idx < shp)).all(1)]  # points outside the map are dropped, not clipped onto its border
+            if len(idx):
+                self.occ[tuple(idx.T)] = np.where(self.occ[tuple(idx.T)] == 2, 2, 1); self.bb_lo = np.minimum(self.bb_lo, idx.min(0)); self.bb_hi = np.maximum(self.bb_hi, idx.max(0))
+        hp = self.pos + dirs[hit] * dd[hit, None]; idx = np.floor((hp - self.origin) / GRID).astype(int); idx = idx[((idx >= 0) & (idx < shp)).all(1)]
+        if len(idx): self.occ[tuple(idx.T)] = 2; self.bb_lo = np.minimum(self.bb_lo, idx.min(0)); self.bb_hi = np.maximum(self.bb_hi, idx.max(0))
+        c = np.floor((self.pos - self.origin) / GRID).astype(int); self.oob += int(((c < 0) | (c >= shp)).any())
         self._depth = d; self.est_traj.append(self.pos.copy())
     def corridor_clear(self, dist, axis="fwd"):
         """Depth-only safety check: any depth return inside the UAV's swept box (|lateral|<0.35, |vertical|<0.35) closer than dist+0.3?"""
         d = self._depth[::4, ::4]; u, v = np.meshgrid(np.arange(0, 256, 4), np.arange(0, 256, 4)); ok = d > 0.05
         x = (u - 128) / self.f * d; y = -(v - 128) / self.f * d
-        if axis == "fwd": box = ok & (np.abs(x) < 0.35) & (np.abs(y) < 0.35) & (d < dist + 0.3)
+        if axis == "fwd": box = ok & (np.abs(x) < 0.30) & (np.abs(y) < 0.30) & (d < dist + 0.25)
         else:  # vertical move: use image band above/below centre, require far depth
             box = ok & (np.abs(x) < 0.35) & ((y * np.sign(dist) > 0) & (np.abs(y) < abs(dist) + 0.4)) & (d < 1.2)
         return not box.any()
+    def vert_clear(self, dz):
+        """Vertical move check from the agent's own occupancy map (the camera cannot see straight up/down): no occupied cell within 0.3 m laterally along the swept column."""
+        n = max(2, int(abs(dz) / 0.1) + 3)
+        for s in np.linspace(0, abs(dz) + 0.3, n):
+            c = self.pos + np.array([0, np.sign(dz) * s, 0]); i = np.clip(np.floor((c - self.origin) / 0.25).astype(int), 0, self.shape - 1)
+            if (self.occ[max(0, i[0] - 1):i[0] + 2, i[1], max(0, i[2] - 1):i[2] + 2] == 2).any(): return False
+        return True
     def map_clear(self, d):
         for s in np.arange(0.1, d + 1e-6, 0.1):
             i = tuple(np.clip(np.floor((self.pos + self.fwd() * s - self.origin) / GRID).astype(int), 0, self.shape - 1))
-            if self.occ[i] != 1: return False
+            if (self.occ[i] == 2) if getattr(self, 'relax', False) else (self.occ[i] != 1): return False
         return self.corridor_clear(d)
     def fwd(self): r = np.deg2rad(self.yaw); return np.array([-np.sin(r), 0, -np.cos(r)])
+    def left(self): r = np.deg2rad(self.yaw); return np.array([-np.cos(r), 0, np.sin(r)])
+    def move_clear(self, vec, d):
+        """Clearance for a move the camera cannot see (sideways / backwards), from the agent's own map: no occupied cell within one cell (0.25 m) of the path,
+        and at least 60% of the sampled path cells already known to be free."""
+        known = 0; n = 0
+        for s in np.arange(0.1, d + 0.3 + 1e-6, 0.1):
+            i = np.clip(np.floor((self.pos + vec * s - self.origin) / GRID).astype(int), 0, np.array(self.shape) - 1)
+            if (self.occ[max(0, i[0] - 1):i[0] + 2, max(0, i[1] - 1):i[1] + 2, max(0, i[2] - 1):i[2] + 2] == 2).any(): return False
+            known += self.occ[tuple(i)] == 1; n += 1
+        return known >= 0.6 * n
     def free_dist(self):
         return A_FWD_L if self.corridor_clear(A_FWD_L) else (A_FWD_S if self.corridor_clear(A_FWD_S) else 0.0)
     # ---- control: command the env, update dead-reckoned pose with the COMMANDED motion ----
@@ -111,6 +133,25 @@ def pol_random(A):
     if A.free_dist() >= 0.9 and A.rng.random() < 0.8: A.act("fwd", A_FWD_L)
     elif A.free_dist() >= 0.15 and A.rng.random() < 0.5: A.act("fwd", A_FWD_S)
     else: A.act("yaw", float(A.rng.choice([-A_TURN_L, A_TURN_L])))
+
+A_LAT = 0.3
+
+def pol_wander(A):
+    """Random fallback that translates instead of spinning: forward when clear, otherwise slide sideways / back off before resorting to a turn."""
+    r = A.rng.random()
+    if A.free_dist() >= 0.9 and r < 0.8: A.act("fwd", A_FWD_L); return
+    if A.free_dist() >= 0.15 and r < 0.9: A.act("fwd", A_FWD_S); return
+    opts = []
+    for sgn in (1, -1):
+        if A.move_clear(A.left() * sgn, A_LAT): opts.append(("lat", sgn * A_LAT))
+    if (not opts or A.rng.random() < 0.25) and A.move_clear(-A.fwd(), A_LAT): opts.append(("fwd", -A_LAT))  # backing off is the least preferred option
+    if opts and A.rng.random() < 0.8:
+        k, m = opts[int(A.rng.integers(len(opts)))]
+        if A.act(k, m): return
+    if not opts and hasattr(A, "vert_clear") and A.rng.random() < 0.5:  # boxed in at this altitude: change height instead of spinning
+        dz = float(A.rng.choice([-1, 1]) * 0.25)
+        if A.vert_clear(dz) and A.act("up", dz): return
+    A.act("yaw", float(A.rng.choice([-A_TURN_L, A_TURN_L])))
 
 def rollout(policy, S, G, steps, seed, pose_mode, video=None, name="", depth_net=None):
     rng = np.random.default_rng(seed); env = Env(S, G, rng, depth_net=depth_net); A = SensorAgent(env, seed, pose_mode)

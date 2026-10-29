@@ -1,5 +1,5 @@
 """Exploration baselines v2: collision-checked random / next-best-view / frontier (3D grid + BFS) for a free-flying UAV."""
-import os, time, json, argparse, collections, numpy as np, imageio
+import os, os, time, json, argparse, collections, numpy as np, imageio
 from uav_sim import UAVSim
 from scenes import SCENES, paths, Geometry
 
@@ -97,18 +97,20 @@ class Frontier:
     def plan(self, A):
         occ = A.occ; cp = A.cam(); start = tuple(np.clip(np.floor((cp - A.origin) / GRID).astype(int), 0, np.array(A.shape) - 1))
         from scipy.ndimage import binary_dilation
-        blocked = binary_dilation(occ == 2, iterations=1)  # inflate by 1 cell (0.25m) -> 0.25 + radius margin
+        blocked = binary_dilation(occ == 2, iterations=int(os.environ.get('PLAN_DIL', '0'))) if int(os.environ.get('PLAN_DIL', '0')) > 0 else (occ == 2)  # inflate by 1 cell (0.25m) -> 0.25 + radius margin
         for b in self.bad: blocked[b] = True
         free = (occ == 1) & ~blocked; free[start] = True
+        nr = tuple(slice(max(0, s - 2), s + 3) for s in start); free[nr] |= (occ == 1)[nr]  # standing inside the inflated zone: allow leaving through known free cells
         unk = (occ == 0)
+        opt = getattr(self, 'optimistic', False); trav = (free | (unk & ~blocked)) if opt else free
         from scipy.ndimage import uniform_filter
         ucnt = uniform_filter(unk.astype(np.float32), size=(5, 3, 5), mode='constant', cval=0.0) * 75  # unknown cells in a 5x3x5 block
         q = collections.deque([start]); prev = {start: None}
         while q:
             c = q.popleft()
-            if c != start and np.linalg.norm((np.array(c) - np.array(start)) * GRID) >= 1.0 and c not in self.bad and ucnt[c] >= self.thr:
+            if c != start and np.linalg.norm((np.array(c) - np.array(start)) * GRID) >= getattr(self, 'min_d', 1.0) and c not in self.bad and ucnt[c] >= self.thr and (not opt or free[c]):
                 # frontier: free cell with a horizontal unknown neighbour backed by enough unknown volume
-                for n in self.NB6[[0, 1, 4, 5]]:
+                for n in (self.NB6 if getattr(self, 'vfront', False) else self.NB6[[0, 1, 4, 5]]):
                     nn = (c[0] + n[0], c[1] + n[1], c[2] + n[2])
                     if all(0 <= nn[i] < A.shape[i] for i in range(3)) and unk[nn]:
                         path = []; k = c
@@ -119,7 +121,7 @@ class Frontier:
             for n in self.NB6:
                 nn = (c[0] + n[0], c[1] + n[1], c[2] + n[2])
                 if nn in prev or not all(0 <= nn[i] < A.shape[i] for i in range(3)): continue
-                if free[nn]: prev[nn] = c; q.append(nn)
+                if trav[nn]: prev[nn] = c; q.append(nn)
         return False
 
 def pol_frontier(A, d, F=Frontier()):
@@ -131,27 +133,51 @@ def frontier_step(A, F):
         if st != "wp": return st
     return st
 
+def seg_free_map(A, p, q):
+    """Straight segment p->q is free in the agent's own occupancy map: no occupied cell (incl. its horizontal neighbours), >=70% known-free."""
+    n = max(2, int(np.linalg.norm(q - p) / 0.1) + 1); ok = 0
+    for s in np.linspace(0, 1, n):
+        i = np.clip(np.floor((p + (q - p) * s - A.origin) / GRID).astype(int), 0, np.array(A.shape) - 1)
+        blk = A.occ[max(0, i[0] - 1):i[0] + 2, i[1], max(0, i[2] - 1):i[2] + 2]
+        if (blk == 2).any(): return False
+        ok += A.occ[tuple(i)] == 1
+    return ok >= 0.7 * n
+
 def _frontier_step(A, F):
+    A.relax = bool(getattr(F, 'optimistic', False) or getattr(F, 'smooth', False))
     cp = A.cam(); cur = tuple(np.floor((cp - A.origin) / GRID).astype(int))
     if F.replan_in <= 0 or not F.path:
-        ok = F.plan(A)
+        nf = getattr(F, "nf", 0)
+        if nf > getattr(F, 'scan_turns', 24) and nf % 12:  # backoff: after a full scan keep exploring randomly and retry the planner only every 12th iteration
+            F.nf = nf + 1; getattr(F, 'fallback', pol_random)(A) if hasattr(F, 'fallback') else pol_random(A, None); return "no_frontier"
+        F.optimistic = False; F.min_d = 1.0; F.thr = 30; ok = F.plan(A)
         if not ok: F.thr = 8; F.bad = set(); ok = F.plan(A)
+        if not ok: F.thr = 4; F.min_d = 0.4; ok = F.plan(A)  # accept weaker / closer frontiers
+        if not ok: F.optimistic = True; F.thr = 8; F.min_d = 1.0; ok = F.plan(A)  # last resort: plan through unknown cells to frontiers cut off from us by gaps in the map
         if not ok:
             F.nf = getattr(F, "nf", 0) + 1
-            if F.nf <= 24: A.act("yaw", A_TURN_L)  # scan in place first
-            else: pol_random(A, None)
+            if F.nf <= getattr(F, 'scan_turns', 24): A.act("yaw", A_TURN_L)  # scan in place first
+            else: getattr(F, 'fallback', pol_random)(A) if hasattr(F, 'fallback') else pol_random(A, None)
             return "no_frontier"
-        F.nf = 0; F.thr = 30
+        F.nf = 0; F.thr = 30; F.min_d = 1.0
         F.replan_in = 25
     F.replan_in -= 1
     if not F.path:
         F.bad.add(F.goal); return "arrived"
+    if getattr(F, "smooth", False) and len(F.path) > 1:  # string-pulling: head for the farthest path cell that is visible in free space
+        for k in range(min(len(F.path), 16) - 1, 0, -1):
+            if seg_free_map(A, cp, A.origin + (np.array(F.path[k]) + 0.5) * GRID): del F.path[:k]; break
     wp = A.origin + (np.array(F.path[0]) + 0.5) * GRID
     v = wp - cp
     if np.linalg.norm(v) < 0.15 or tuple(np.floor((cp - A.origin) / GRID).astype(int)) == tuple(F.path[0]): F.path.pop(0); return "wp"
     p, y = A.s.pose(); want = np.rad2deg(np.arctan2(-v[0], -v[2])) % 360 if np.hypot(v[0], v[2]) > 0.1 else y
     dy = (want - y + 180) % 360 - 180
-    if abs(dy) > 8: A.act("yaw", float(np.clip(dy, -A_TURN_L, A_TURN_L))); return "turn"
+    if getattr(F, 'translate', False) and abs(dy) > getattr(F, 'align_tol', 8) and np.hypot(v[0], v[2]) < 1.2:
+        # close waypoint: slide / back off toward it instead of turning in place (the camera keeps its heading)
+        vh = np.array([v[0], 0, v[2]]); vh = vh / (np.linalg.norm(vh) + 1e-9); lat = float(vh @ A.left()); fw = float(vh @ A.fwd()); st = min(0.3, float(np.hypot(v[0], v[2])))
+        for k, m in sorted(((("lat", st * np.sign(lat)), abs(lat)), (("fwd", st * np.sign(fw)), abs(fw))), key=lambda x: -x[1]):
+            if m > 0.35 and A.act(k[0], k[1]): return "slide"
+    if abs(dy) > getattr(F, 'align_tol', 8): A.act("yaw", float(np.clip(dy, -A_TURN_L, A_TURN_L))); return "turn"
     if abs(v[1]) > 0.15 and np.hypot(v[0], v[2]) < 0.3: ok = A.act("up", float(np.sign(v[1]) * A_UP))
     else:
         hd = min(np.hypot(v[0], v[2]), 0.9)

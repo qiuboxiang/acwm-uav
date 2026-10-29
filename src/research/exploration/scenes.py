@@ -1,4 +1,4 @@
-import os, glob, numpy as np, trimesh
+import os, glob, collections, numpy as np, trimesh
 from scipy.spatial import cKDTree
 ROOT = os.environ.get("UAV_SCENES_ROOT") or os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "scenes", "scene_datasets")
 SCENES = {  # name -> (glb/ply, navmesh)
@@ -26,10 +26,28 @@ class Geometry:
             if best is None or err < best[0]: best = (err, R)
         m.apply_transform(best[1]); self.R = best[1]
         n = int(min(max_pts, m.area * density))
-        pts, _ = trimesh.sample.sample_surface(m, n)
+        pts, _ = trimesh.sample.sample_surface(m, n, seed=0)  # deterministic ground truth across processes (replay workers are merged by voxel index)
         self.pts = pts.astype(np.float32); self.tree = cKDTree(self.pts)
         self.bounds = m.bounds
         self.gt_vox = set(map(tuple, np.floor(self.pts / 0.25).astype(np.int32)))
+    def ensure_main(self, pathfinder, res=0.25, n=600):
+        """Label 3D free-space components (UAV radius) and find the main one = where most navigable floor points lie; used to reject starts trapped in small pockets."""
+        if getattr(self, "_lab", None) is not None: return
+        from scipy.ndimage import label
+        lo, hi = self.bounds[0] - 0.5, self.bounds[1] + 0.5; ax = [np.arange(lo[i], hi[i], res) for i in range(3)]
+        P = np.stack(np.meshgrid(*ax, indexing="ij"), -1).reshape(-1, 3); d = self.tree.query(P, k=1)[0].reshape(len(ax[0]), len(ax[1]), len(ax[2]))
+        lab, _ = label(d >= 0.25); self._lab, self._lo, self._res = lab, lo, res; self._sizes = np.bincount(lab.ravel()); self._sizes[0] = 0
+        cnt = collections.Counter()
+        for _ in range(n):
+            p = np.array(pathfinder.get_random_navigable_point(), float)
+            if np.isfinite(p).all(): cnt[self._cid(p + [0, 1.5, 0])] += 1
+        cnt.pop(0, None); self._main = cnt.most_common(1)[0][0]
+    def _cid(self, p):
+        i = np.floor((np.asarray(p) - self._lo) / self._res).astype(int)
+        if (i < 0).any() or (i >= np.array(self._lab.shape)).any(): return 0
+        return int(self._lab[tuple(i)])
+    def in_main(self, p):
+        c = self._cid(p); return c != 0 and (c == self._main or self._sizes[c] >= 0.5 * self._sizes[self._main])
     def collides(self, p, r=0.25):
         return len(self.tree.query_ball_point(p, r, return_length=True)) > 0 if False else self.tree.query(p, k=1)[0] < r
     def segment_free(self, a, b, r=0.25, step=0.1):

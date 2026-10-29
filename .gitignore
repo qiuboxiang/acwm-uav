@@ -42,3 +42,6 @@ IndoorUAV-Agent/
 src/research/exploration/results*/
 src/research/exploration/logs*/
 *.mp4
+third_party/
+src/research/exploration_v5/
+src/research/exploration_dev/

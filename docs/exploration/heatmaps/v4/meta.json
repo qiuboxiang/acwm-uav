@@ -1,0 +1,20 @@
+{
+ "tag": "v4",
+ "scene": "gibson_Adrian",
+ "generated_by": "src/research/exploration/heatmap_v5.py",
+ "created": "2026-10-28T09:10:54",
+ "git_head": "a8d0534",
+ "data": "data/collected_10h",
+ "replay": {
+  "v4_0.npz": "3174bed790018043921b7d686f8196b8ab5cf160c9d7b723d78e48dfbfc9cb84",
+  "v4_1.npz": "3cd6e0b960bb2315516c21168184e81c9d72e13d23e73dcb0cca993247caa9fe",
+  "v4_2.npz": "8aefd74505c38d55851700e765a1760e85720fe6cb93a0e08c6d6d2d7641139f"
+ },
+ "policy": "frontier3 (2-D band frontier, lambda=0.04) + random fallback + altitude changes (p_alt=0.4)",
+ "n_traj": 680,
+ "n_frames": 401878,
+ "union": 0.9901,
+ "ge3": 0.9637,
+ "n_unseen": 111,
+ "heatmap_sha256": "a8b3b9eac18a0b9736d9119907260ccb464d526f56eead0c871db6edeaee5a3b"
+}
