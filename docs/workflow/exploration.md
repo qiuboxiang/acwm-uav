@@ -5,7 +5,7 @@
 ## 前置条件
 
 - habitat 环境：conda 环境 `indooruav`（py3.9，habitat-sim 0.3.3）。运行时需 `KMP_DUPLICATE_LIB_OK=TRUE`，并为每个进程设 `OMP_NUM_THREADS=1 VECLIB_MAXIMUM_THREADS=1`，否则 torch（RGB-only 深度网络）会线程过订。
-- 场景放在 `scenes/`（不入库），也可用 `UAV_SCENES_ROOT` 指定。
+- 场景放在 `scenes/`（不入库），也可用 `UAV_SCENES_ROOT` 指定；获取方式见 [local-assets.md](local-assets.md)。
 - 仓库自身的校验和测试用项目 `.venv`（py3.12）：`uv run python -m pytest`。
 - `run_*.sh` 里的解释器路径是作者本机的 conda 路径，换机器时需要自行改成自己的 `indooruav` 环境。
 - 同时跑的 habitat 进程以 12 个左右为上限，再多会因显存和交换而变慢。
